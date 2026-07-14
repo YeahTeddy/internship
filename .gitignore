@@ -75,6 +75,9 @@ logs/
 
 # ── 数据文件 ────────────────────────────────────────
 backend/datasets/
+DAWN/
+rsod_data/
+rsod_data.zip
 *.csv
 *.xlsx
 *.parquet

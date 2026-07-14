@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.api.auth import router as auth_router
+from app.api.training import router as training_router
 from app.core.exceptions import register_exception_handlers
 from app.middleware.request_logger import RequestLogMiddleware
 from app.api.health import router as health_router
@@ -60,6 +61,7 @@ app.add_middleware(RequestLogMiddleware)
 # ── 注册路由 ─────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(health_router)
+app.include_router(training_router)
 
 
 @app.get("/")

@@ -11,7 +11,7 @@ Pydantic 请求/响应模型
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ══════════════════════════════════════════════════════════════
@@ -175,8 +175,7 @@ class DetectionTaskResponse(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class DetectionResultResponse(BaseModel):
@@ -227,7 +226,7 @@ class DetectionStatistics(BaseModel):
 class TrainingTaskCreate(BaseModel):
     """创建训练任务"""
     scene_id: int = Field(..., description="关联场景 ID")
-    model_name: str = Field(default="yolov11n", description="基础模型")
+    model_name: str = Field(default="yolo11n", description="基础模型")
     epochs: int = Field(default=100, ge=10, le=500, description="训练轮数")
     img_size: int = Field(default=640, description="图像尺寸")
     batch_size: int = Field(default=16, ge=1, le=64, description="批次大小")
@@ -235,6 +234,8 @@ class TrainingTaskCreate(BaseModel):
     optimizer: str = Field(default="SGD", description="优化器")
     lr0: float = Field(default=0.01, description="初始学习率")
     augment_config: Optional[dict] = Field(None, description="数据增强配置")
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 class TrainingTaskResponse(BaseModel):
@@ -258,8 +259,7 @@ class TrainingTaskResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class TrainingMetricResponse(BaseModel):
@@ -290,8 +290,7 @@ class ModelVersionBrief(BaseModel):
     is_default: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class ModelVersionResponse(BaseModel):
@@ -316,8 +315,7 @@ class ModelVersionResponse(BaseModel):
     is_default: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class ModelVersionCreate(BaseModel):
@@ -325,8 +323,57 @@ class ModelVersionCreate(BaseModel):
     scene_id: int
     version: str = Field(..., description="版本号")
     model_name: str = Field(..., description="模型名称")
-    model_type: str = Field(default="yolov11n", description="模型类型")
+    model_type: str = Field(default="yolo11n", description="模型类型")
     description: Optional[str] = None
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+# --- 模型评估与导出 ---
+
+
+class ModelValidateRequest(BaseModel):
+    """模型评估请求"""
+    split: str = Field(default="val", description="评估数据集划分: val / test / train")
+    conf: float = Field(default=0.001, description="置信度阈值")
+    iou: float = Field(default=0.6, description="NMS IoU 阈值")
+
+
+class ModelExportRequest(BaseModel):
+    """模型导出请求"""
+    version: Optional[str] = Field(None, description="版本号（如 v1.0.0，不传则自动生成）")
+    description: Optional[str] = Field(None, description="版本描述/变更说明")
+    set_default: bool = Field(default=False, description="是否设为该场景的默认模型")
+    upload_minio: bool = Field(default=True, description="是否上传到 MinIO")
+
+
+class ModelExportResponse(BaseModel):
+    """模型导出响应"""
+    model_version_id: int
+    version: str
+    model_name: str
+    model_path: str
+    export_dir: str
+    minio_url: Optional[str] = None
+    file_size: Optional[int] = None
+    evaluation: dict
+    is_default: bool
+    message: str
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+class ModelValidateResponse(BaseModel):
+    """模型评估响应"""
+    task_id: int
+    task_uuid: str
+    split: str
+    overall: dict
+    per_class: dict
+    model_version_id: Optional[int] = None
+    model_version: Optional[str] = None
+
+    model_config = ConfigDict(protected_namespaces=())
 
 
 # ══════════════════════════════════════════════════════════════
