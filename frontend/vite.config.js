@@ -32,6 +32,12 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // WebSocket 代理（摄像头检测）
+      '/api/detection/camera': {
+        target: 'ws://localhost:8000',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 

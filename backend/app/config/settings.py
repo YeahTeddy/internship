@@ -65,6 +65,21 @@ class Settings(BaseSettings):
         "http://localhost:3000,http://localhost:5173,http://localhost:8080"
     )
 
+    # ── LLM 配置 ──────────────────────────────────────
+    OPENAI_API_KEY: str = "sk-your-api-key-here"
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+
+    # 通义千问（推荐，国内访问快）
+    QWEN_API_KEY: str = "sk-your-qwen-api-key"
+    QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    QWEN_MODEL: str = "qwen-plus"
+
+    # 本地 LLM 配置（可选）
+    USE_LOCAL_LLM: bool = False
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5:7b"
+
     @property
     def cors_origins_list(self) -> list:
         """将 CORS 配置字符串转为列表"""

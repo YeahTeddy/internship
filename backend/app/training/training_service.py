@@ -201,49 +201,36 @@ class TrainingService:
             }
 
             # ── 注册训练回调 ──
-            def on_train_epoch_end(trainer):
+            # 注意：必须用 on_fit_epoch_end（验证完后触发），不能用 on_train_epoch_end
+            # 因为 on_train_epoch_end 在验证之前触发，此时 trainer.metrics 是上一轮的旧值
+            def on_fit_epoch_end(trainer):
                 try:
                     epoch = trainer.epoch + 1
                     metrics = trainer.metrics or {}
 
+                    # 训练 loss 从 trainer.tloss 获取（shape [3]: box, cls, dfl）
+                    tloss = trainer.tloss
+                    if tloss is not None and hasattr(tloss, "__len__") and len(tloss) >= 3:
+                        box_loss = float(tloss[0])
+                        cls_loss = float(tloss[1])
+                        dfl_loss = float(tloss[2])
+                    elif tloss is not None:
+                        # 如果只有一个 loss 值，全部设为相同
+                        box_loss = cls_loss = dfl_loss = float(tloss)
+                    else:
+                        box_loss = cls_loss = dfl_loss = 0.0
+
+                    # 验证指标从 trainer.metrics 获取（on_fit_epoch_end 时已是当前轮最新值）
                     metric_record = TrainingMetric(
                         task_id=task_id,
                         epoch=epoch,
-                        box_loss=float(
-                            metrics.get("metrics/box_loss", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        cls_loss=float(
-                            metrics.get("metrics/cls_loss", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        dfl_loss=float(
-                            metrics.get("metrics/dfl_loss", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        precision=float(
-                            metrics.get("metrics/precision(B)", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        recall=float(
-                            metrics.get("metrics/recall(B)", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        map50=float(
-                            metrics.get("metrics/mAP50(B)", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
-                        map50_95=float(
-                            metrics.get("metrics/mAP50-95(B)", 0)
-                            if isinstance(metrics, dict)
-                            else 0
-                        ),
+                        box_loss=box_loss,
+                        cls_loss=cls_loss,
+                        dfl_loss=dfl_loss,
+                        precision=float(metrics.get("metrics/precision(B)", 0)),
+                        recall=float(metrics.get("metrics/recall(B)", 0)),
+                        map50=float(metrics.get("metrics/mAP50(B)", 0)),
+                        map50_95=float(metrics.get("metrics/mAP50-95(B)", 0)),
                     )
                     db.add(metric_record)
 
@@ -263,7 +250,7 @@ class TrainingService:
                     logger.warning("训练回调异常（不影响训练）：%s", str(e))
                     db.rollback()
 
-            model.add_callback("on_train_epoch_end", on_train_epoch_end)
+            model.add_callback("on_fit_epoch_end", on_fit_epoch_end)
 
             # ── 开始训练 ──
             logger.info(
@@ -587,7 +574,7 @@ class TrainingService:
             }
 
             per_class = {}
-            if results.box.ap:
+            if results.box.ap is not None and len(results.box.ap) > 0:
                 for i, ap50 in enumerate(results.box.ap50):
                     class_name = model.names.get(i, f"class_{i}")
                     ap50_95 = results.box.ap[i] if i < len(results.box.ap) else 0.0

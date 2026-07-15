@@ -5,8 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.api.auth import router as auth_router
+from app.api.chat import router as chat_router
+from app.api.dashboard import router as dashboard_router
+from app.api.detection import router as detection_router
+from app.api.history import router as history_router
 from app.api.training import router as training_router
+from app.api.user import router as user_router
 from app.core.exceptions import register_exception_handlers
+from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_logger import RequestLogMiddleware
 from app.api.health import router as health_router
 
@@ -58,10 +64,18 @@ app.add_middleware(
 # 2. 请求日志中间件（在 CORS 之后执行）
 app.add_middleware(RequestLogMiddleware)
 
+# 3. 速率限制中间件
+app.add_middleware(RateLimiterMiddleware)
+
 # ── 注册路由 ─────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(training_router)
+app.include_router(chat_router)       # Day 8: 智能对话 SSE
+app.include_router(detection_router)  # Day 8: 快捷检测
+app.include_router(dashboard_router)  # Day 10: 数据看板
+app.include_router(history_router)    # Day 10: 检测历史
+app.include_router(user_router)       # Day 10: 用户管理
 
 
 @app.get("/")

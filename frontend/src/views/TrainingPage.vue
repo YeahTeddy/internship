@@ -295,6 +295,7 @@
           <el-select v-model="trainForm.scene_id" placeholder="选择场景">
             <el-option label="遥感目标检测" :value="1" />
             <el-option label="雨雾天气车辆检测" :value="2" />
+            <el-option label="复杂天气" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item label="基础模型">

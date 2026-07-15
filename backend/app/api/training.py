@@ -23,6 +23,7 @@ from app.api.auth import get_current_user
 from app.config.settings import settings
 from app.core.logger import get_logger
 from app.database.session import get_db
+from app.entity.db_models import TrainingTask
 from app.entity.schemas import ModelExportRequest, ModelValidateRequest, TrainingTaskCreate
 from app.training.training_service import training_service
 

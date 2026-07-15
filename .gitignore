@@ -68,6 +68,10 @@ checkpoints/
 runs/
 ultralytics/
 
+# 标注视频/评估产物
+annotated_video*.mp4
+eval_report.json
+
 # ── 日志文件 ───────────────────────────────────────
 *.log
 logs/
@@ -78,6 +82,7 @@ backend/datasets/
 DAWN/
 rsod_data/
 rsod_data.zip
+archive/
 *.csv
 *.xlsx
 *.parquet
