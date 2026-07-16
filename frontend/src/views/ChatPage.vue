@@ -28,6 +28,9 @@
           <div v-if="msg.loading" class="typing-indicator">
             <span></span><span></span><span></span>
           </div>
+          <div v-else-if="msg.thinking" class="thinking-indicator">
+            🤔 {{ msg.thinkingContent || '正在思考...' }}
+          </div>
           <div
             v-else
             class="message-content markdown-body"
@@ -43,8 +46,12 @@
 
         <!-- 工具调用提示 -->
         <div v-if="msg.toolCall" class="tool-call-info">
-          <el-tag size="small" type="info">
-            🔧 调用工具: {{ msg.toolCall.tool }}
+          <el-tag v-if="msg.toolCall.status === 'running'" size="small" type="warning" effect="plain">
+            🔧 正在调用: {{ msg.toolCall.tool }}...
+          </el-tag>
+          <el-tag v-else size="small" type="success" effect="plain">
+            ✅ 已调用: {{ msg.toolCall.tool }}
+            <span v-if="msg.toolCall.summary" style="margin-left: 4px; color: #67c23a">— {{ msg.toolCall.summary }}</span>
           </el-tag>
         </div>
       </div>
@@ -52,6 +59,9 @@
 
     <!-- ── 快捷操作栏 ── -->
     <div class="quick-actions">
+      <el-select v-model="selectedModelId" size="small" style="width: 160px" placeholder="选择模型">
+        <el-option v-for="m in modelList" :key="m.id" :label="m.version + ' (' + m.map50 + ')'" :value="m.id" />
+      </el-select>
       <el-button
         @click="handleQuickDetect('single')"
         :disabled="agentStore.isLoading"
@@ -132,7 +142,7 @@
  *   - 快捷操作栏（单图/批量/视频/摄像头）
  *   - 中断当前对话
  */
-import { detectBatch, detectSingle, detectVideo, detectZip, getVideoStatus } from '@/api/detection'
+import { detectBatch, detectSingle, detectVideo, detectZip, getModelList, getVideoStatus } from '@/api/detection'
 import DetectionResultCard from '@/components/DetectionResultCard.vue'
 import { useAgentStore } from '@/stores/agent'
 import { renderMarkdown } from '@/utils/markdown'
@@ -150,6 +160,8 @@ const selectedFile = ref(null)
 const messageListRef = ref(null)
 const fileInputRef = ref(null)
 const isDragOver = ref(false)
+const modelList = ref([])
+const selectedModelId = ref(null)
 
 // ── 计算属性 ──
 const canSend = computed(() => {
@@ -223,21 +235,33 @@ async function sendMessage() {
         fullContent += data.content
         agentStore.updateLastAssistantMessage(fullContent)
         scrollToBottom()
-      } else if (data.type === 'tool_call') {
+      } else if (data.type === 'thinking') {
         const lastMsg = agentStore.messages[agentStore.messages.length - 1]
-        lastMsg.toolCall = { tool: data.tool, input: data.input }
-      } else if (data.type === 'tool_result') {
+        lastMsg.thinking = true
+        lastMsg.thinkingContent = data.content
+      } else if (data.type === 'tool_start' || data.type === 'tool_call') {
         const lastMsg = agentStore.messages[agentStore.messages.length - 1]
+        lastMsg.thinking = false
+        lastMsg.toolCall = { tool: data.tool, input: data.input, status: 'running' }
+        scrollToBottom()
+      } else if (data.type === 'tool_end' || data.type === 'tool_result') {
+        const lastMsg = agentStore.messages[agentStore.messages.length - 1]
+        if (lastMsg.toolCall) lastMsg.toolCall.status = 'done'
         try {
-          const result = JSON.parse(data.result)
+          const result = JSON.parse(data.result || '{}')
           if (result.detections) {
             lastMsg.detectionResult = result
             lastMsg.loading = false
+          } else if (result.results) {
+            lastMsg.knowledgeResult = result
           }
         } catch (e) {
-          lastMsg.content += `\n[工具结果: ${data.result?.substring(0, 100)}...]`
+          // 非 JSON 结果，忽略
         }
         scrollToBottom()
+      } else if (data.type === 'done') {
+        fullContent = data.full_text || fullContent
+        agentStore.updateLastAssistantMessage(fullContent)
       } else if (data.type === 'error') {
         const lastMsg = agentStore.messages[agentStore.messages.length - 1]
         lastMsg.content = data.content
@@ -247,9 +271,7 @@ async function sendMessage() {
     },
     onDone: () => {
       const lastMsg = agentStore.messages[agentStore.messages.length - 1]
-      if (lastMsg.loading) {
-        lastMsg.loading = false
-      }
+      if (lastMsg.loading) lastMsg.loading = false
       agentStore.setLoading(false)
     },
     onError: (err) => {
@@ -351,6 +373,7 @@ async function handleQuickDetect(type) {
 
       const formData = new FormData()
       formData.append('file', file)
+      if (selectedModelId.value) formData.append('model_version_id', selectedModelId.value)
 
       try {
         const result = await detectSingle(formData)
@@ -395,6 +418,7 @@ async function handleQuickDetect(type) {
           images: imagePreviews,
         })
       }
+      if (selectedModelId.value) formData.append('model_version_id', selectedModelId.value)
 
       agentStore.addMessage({
         role: 'assistant',
@@ -463,6 +487,7 @@ async function handleVideoDetect() {
 
     const formData = new FormData()
     formData.append('file', file)
+    if (selectedModelId.value) formData.append('model_version_id', selectedModelId.value)
 
     try {
       const uploadResult = await detectVideo(formData)
@@ -523,7 +548,23 @@ async function pollVideoProgress(taskId) {
   await poll()
 }
 
+/** 加载可用模型列表 */
+async function loadModels() {
+  try {
+    const res = await getModelList()
+    modelList.value = res.models || []
+    // 默认选中 is_default 的模型
+    const defaultModel = modelList.value.find(m => m.is_default)
+    if (defaultModel) {
+      selectedModelId.value = defaultModel.id
+    }
+  } catch (err) {
+    console.error('[加载模型列表失败]', err)
+  }
+}
+
 onMounted(() => {
+  loadModels()
   if (agentStore.messages.length === 0) {
     agentStore.addMessage({
       role: 'assistant',
@@ -686,6 +727,13 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 12px;
   color: #666;
+}
+
+.thinking-indicator {
+  color: #909399;
+  font-size: 13px;
+  font-style: italic;
+  padding: 4px 0;
 }
 
 @keyframes typing {

@@ -29,7 +29,25 @@ from app.storage.redis_client import redis_client
 
 logger = get_logger(__name__)
 
+
+def _get_default_scene_id():
+    """获取默认检测场景 ID"""
+    from app.entity.db_models import DetectionScene
+    db = SessionLocal()
+    try:
+        scene = db.query(DetectionScene).first()
+        return scene.id if scene else None
+    finally:
+        db.close()
+
 router = APIRouter(prefix="/api/detection", tags=["快捷检测"])
+
+
+@router.get("/models", summary="获取可用模型列表")
+async def list_models(_current_user=Depends(get_current_user)):
+    """获取所有可用的检测模型版本"""
+    from app.services.detection_service import detection_service
+    return {"models": detection_service.list_models()}
 
 
 @router.post("/single", summary="单图检测")
@@ -37,9 +55,12 @@ async def detect_single_api(
     file: UploadFile = File(..., description="检测图片"),
     conf: float = Form(0.25, description="置信度阈值"),
     scene_id: int = Form(None, description="场景 ID"),
+    model_version_id: int = Form(None, description="模型版本 ID"),
     current_user=Depends(get_current_user),
 ):
     """快捷单图检测（跳过 LLM，直接调用 YOLO）"""
+    if not scene_id:
+        scene_id = _get_default_scene_id()
     suffix = os.path.splitext(file.filename)[1] or ".jpg"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         content = await file.read()
@@ -50,6 +71,7 @@ async def detect_single_api(
         result = detection_service.detect_single(
             image_path=tmp_path, conf=conf,
             scene_id=scene_id, user_id=current_user.id,
+            model_version_id=model_version_id,
         )
         result["filename"] = file.filename
         return result
@@ -62,9 +84,12 @@ async def detect_batch_api(
     files: list[UploadFile] = File(..., description="多张图片"),
     conf: float = Form(0.25),
     scene_id: int = Form(None),
+    model_version_id: int = Form(None),
     current_user=Depends(get_current_user),
 ):
     """快捷批量检测"""
+    if not scene_id:
+        scene_id = _get_default_scene_id()
     temp_paths = []
     try:
         for file in files:
@@ -77,6 +102,7 @@ async def detect_batch_api(
         result = detection_service.detect_batch(
             image_paths=temp_paths, conf=conf,
             scene_id=scene_id, user_id=current_user.id,
+            model_version_id=model_version_id,
         )
         return result
     finally:
@@ -95,6 +121,8 @@ async def detect_zip_api(
     current_user=Depends(get_current_user),
 ):
     """快捷 ZIP 检测：解压 ZIP 并批量检测其中所有图片"""
+    if not scene_id:
+        scene_id = _get_default_scene_id()
     suffix = os.path.splitext(file.filename)[1] or ".zip"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         content = await file.read()
@@ -150,9 +178,12 @@ async def detect_video_api(
     frame_sample_rate: int = Form(5, description="帧采样间隔"),
     max_frames: int = Form(50, description="最多处理关键帧数"),
     scene_id: int = Form(None, description="场景 ID"),
+    model_version_id: int = Form(None, description="模型版本 ID"),
     current_user=Depends(get_current_user),
 ):
     """视频检测：上传视频，后台异步处理，通过 status 接口轮询进度"""
+    if not scene_id:
+        scene_id = _get_default_scene_id()
     allowed_video_types = {".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv"}
     suffix = os.path.splitext(file.filename)[1].lower()
     if suffix not in allowed_video_types:
@@ -199,6 +230,7 @@ async def detect_video_api(
                 video_path=tmp_path, conf=conf,
                 frame_sample_rate=frame_sample_rate, max_frames=max_frames,
                 scene_id=scene_id, user_id=current_user.id, task_id=task_id,
+                model_version_id=model_version_id,
             )
             if "error" in result:
                 redis_client.set_json(f"video_task:{task_id}", {"status": "failed", "progress": 0, "message": result["error"]}, expire=3600)

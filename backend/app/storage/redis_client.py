@@ -104,6 +104,30 @@ class RedisClient:
             lambda: self._client.keys(pattern) if self._use_redis else [k for k in self._memory_cache.keys() if pattern == "*" or k.startswith(pattern.replace("*", ""))]
         )
 
+    def lpush(self, key: str, *values) -> Any:
+        """列表右侧追加（保持时间顺序：最早在前）"""
+        def _lpush():
+            if self._use_redis:
+                return self._client.rpush(key, *values)
+            else:
+                if key not in self._memory_cache:
+                    self._memory_cache[key] = []
+                self._memory_cache[key] = self._memory_cache[key] + list(values)
+                return len(values)
+        return self._retry_on_fail(_lpush)
+
+    def lrange(self, key: str, start: int, end: int) -> list:
+        """获取列表指定范围的元素"""
+        def _lrange():
+            if self._use_redis:
+                return self._client.lrange(key, start, end)
+            else:
+                lst = self._memory_cache.get(key, [])
+                if end == -1:
+                    return lst[start:]
+                return lst[start:end + 1]
+        return self._retry_on_fail(_lrange)
+
     def info(self) -> dict:
         return {
             "use_redis": self._use_redis,

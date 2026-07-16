@@ -69,9 +69,13 @@ async def chat_stream(
     )
 
     async def event_generator():
+        from app.agent.tools.analysis_tool import set_current_user_id
+        set_current_user_id(current_user.id)
+
         try:
             async for event in detection_agent.chat_stream(
                 message=message, image_path=image_path,
+                user_id=current_user.id, session_id=session_id or f"default_{current_user.id}",
             ):
                 event_data = json.dumps(event, ensure_ascii=False)
                 yield f"data: {event_data}\n\n"

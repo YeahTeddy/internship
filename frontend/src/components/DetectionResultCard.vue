@@ -38,6 +38,8 @@
           <el-tag type="info">FPS: {{ result.fps }}</el-tag>
           <el-tag type="info">采样帧: {{ result.processed_frames }}</el-tag>
           <el-tag type="success">目标: {{ result.total_objects }}</el-tag>
+          <el-tag v-if="result.unique_vehicles" type="warning">唯一车辆: {{ result.unique_vehicles }}</el-tag>
+          <el-tag v-if="result.crossing_count" type="danger">越线: {{ result.crossing_count }}</el-tag>
         </div>
         <div v-if="result.annotated_video_url" class="video-player">
           <video :src="result.annotated_video_url" controls preload="metadata"></video>

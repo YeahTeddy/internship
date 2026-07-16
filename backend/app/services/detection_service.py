@@ -46,27 +46,33 @@ class DetectionService:
     """目标检测服务 — 封装 YOLOv11 推理全流程"""
 
     @staticmethod
-    def _get_default_model_path() -> str:
+    def _get_model_path(model_version_id: int = None) -> str:
         """
-        获取默认模型权重路径
+        获取模型权重路径
 
         查找顺序：
-          1. models/ 目录下 is_default=True 的模型
-          2. runs/train/ 目录下最新训练产出的 best.pt
-          3. 回退到预训练模型 yolo11n.pt
+          1. 指定的 model_version_id（用户选择）
+          2. models/ 目录下 is_default=True 的模型
+          3. runs/train/ 目录下最新训练产出的 best.pt
+          4. 回退到预训练模型 yolo11n.pt
         """
         db = SessionLocal()
         try:
-            # 查找默认模型版本
+            # 指定模型版本
+            if model_version_id:
+                model_version = db.query(ModelVersion).filter(ModelVersion.id == model_version_id).first()
+                if model_version and os.path.exists(model_version.model_path):
+                    return model_version.model_path
+
+            # 默认模型版本
             default_model = (
                 db.query(ModelVersion).filter(ModelVersion.is_default == True).first()
             )
             if default_model and os.path.exists(default_model.model_path):
                 return default_model.model_path
 
-            # 回退：查找最新训练的 best.pt
+            # 回退：最新训练的 best.pt
             from app.entity.db_models import TrainingTask
-
             latest_task = (
                 db.query(TrainingTask)
                 .filter(TrainingTask.status == "completed")
@@ -75,43 +81,60 @@ class DetectionService:
             )
             if latest_task:
                 weights_path = os.path.join(
-                    os.getcwd(),
-                    settings.TRAIN_OUTPUT_DIR,
-                    f"task_{latest_task.task_uuid}",
-                    "weights",
-                    "best.pt",
+                    os.getcwd(), settings.TRAIN_OUTPUT_DIR,
+                    f"task_{latest_task.task_uuid}", "weights", "best.pt",
                 )
                 if os.path.exists(weights_path):
                     return weights_path
         finally:
             db.close()
 
-        # 最终回退：预训练模型
         return "yolo11n.pt"
 
     @staticmethod
-    def _get_model(scene_id: int = None) -> YOLO:
-        """加载 YOLO 模型：优先使用场景关联的默认模型，否则使用全局默认模型"""
-        model_path = None
+    def list_models() -> list[dict]:
+        """获取所有可用的检测模型"""
+        db = SessionLocal()
+        try:
+            models = db.query(ModelVersion).order_by(ModelVersion.id).all()
+            return [
+                {
+                    "id": m.id,
+                    "version": m.version,
+                    "model_name": m.model_name,
+                    "model_type": m.model_type,
+                    "map50": round(m.map50 or 0, 4),
+                    "is_default": m.is_default,
+                }
+                for m in models
+            ]
+        finally:
+            db.close()
 
-        if scene_id:
-            db = SessionLocal()
-            try:
-                default_model = (
-                    db.query(ModelVersion)
-                    .filter(
-                        ModelVersion.scene_id == scene_id,
-                        ModelVersion.is_default == True,
+    @staticmethod
+    def _get_model(scene_id: int = None, model_version_id: int = None) -> YOLO:
+        """加载 YOLO 模型：支持指定版本 ID、场景默认、全局默认"""
+        if model_version_id:
+            model_path = DetectionService._get_model_path(model_version_id)
+        else:
+            model_path = None
+            if scene_id:
+                db = SessionLocal()
+                try:
+                    default_model = (
+                        db.query(ModelVersion)
+                        .filter(
+                            ModelVersion.scene_id == scene_id,
+                            ModelVersion.is_default == True,
+                        )
+                        .first()
                     )
-                    .first()
-                )
-                if default_model and os.path.exists(default_model.model_path):
-                    model_path = default_model.model_path
-            finally:
-                db.close()
-
-        if not model_path:
-            model_path = DetectionService._get_default_model_path()
+                    if default_model and os.path.exists(default_model.model_path):
+                        model_path = default_model.model_path
+                finally:
+                    db.close()
+            if not model_path:
+                model_path = DetectionService._get_model_path()
 
         logger.info("加载检测模型: %s", model_path)
         return YOLO(model_path)
@@ -182,6 +205,7 @@ class DetectionService:
         iou: float = 0.45,
         scene_id: int = None,
         user_id: int = None,
+        model_version_id: int = None,
     ) -> dict:
         """
         单图检测
@@ -191,14 +215,14 @@ class DetectionService:
         """
         db = SessionLocal()
         try:
-            model = self._get_model(scene_id)
+            model = self._get_model(scene_id, model_version_id)
 
             results = model.predict(
                 source=image_path,
                 conf=conf,
                 iou=iou,
                 imgsz=640,
-                device="cpu",
+                device="0",
                 save=False,
                 verbose=False,
             )
@@ -279,11 +303,12 @@ class DetectionService:
         conf: float = 0.25,
         scene_id: int = None,
         user_id: int = None,
+        model_version_id: int = None,
     ) -> dict:
         """批量检测多张图片"""
         db = SessionLocal()
         try:
-            model = self._get_model(scene_id)
+            model = self._get_model(scene_id, model_version_id)
 
             if not scene_id:
                 default_scene = db.query(DetectionScene).first()
@@ -440,6 +465,7 @@ class DetectionService:
         scene_id: int = None,
         user_id: int = None,
         task_id: int = None,
+        model_version_id: int = None,
     ) -> dict:
         """
         视频检测 — 逐帧采样 + YOLO 推理
@@ -459,7 +485,7 @@ class DetectionService:
         """
         db = SessionLocal()
         try:
-            model = self._get_model(scene_id)
+            model = self._get_model(scene_id, model_version_id)
 
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
@@ -503,6 +529,13 @@ class DetectionService:
             class_counts = {}
             last_detections = []
             last_frame = None
+            seen_track_ids = set()  # 已出现过的车辆 track_id（去重计数用）
+            unique_vehicle_count = 0
+
+            # ── 越线计数（虚拟线计数）──
+            y_line = height // 2  # 基准线：视频高度的 50%（水平中线）
+            prev_centers = {}     # {track_id: (cx, cy)} 上一帧的中心点
+            crossing_count = 0    # 越线车辆数
 
             # 创建标注视频输出
             output_tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -519,55 +552,61 @@ class DetectionService:
 
                 is_sampled = frame_idx in sample_set
 
-                if is_sampled:
-                    # 场景变化检测：决定是否重新推理
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    gray_small = cv2.resize(gray, (100, 100))
-                    need_inference = False
-                    if last_frame is None:
-                        need_inference = True
-                    else:
-                        diff = cv2.absdiff(last_frame, gray_small)
-                        if diff.mean() > 5:  # 降低阈值，交通视频帧间差异小
-                            need_inference = True
-                    last_frame = gray_small.copy()
+                # 每一帧都通过 ByteTrack，保持跟踪状态连续（GPU 加速）
+                results = model.track(source=frame, conf=conf, iou=iou, imgsz=640, device="0", save=False, verbose=False, persist=True, tracker="bytetrack.yaml")
+                result = results[0]
+                frame_detections = []
 
-                    if need_inference:
-                        results = model.predict(source=frame, conf=conf, iou=iou, imgsz=640, device="cpu", save=False, verbose=False)
-                        result = results[0]
-                        frame_detections = []
+                if result.boxes is not None and len(result.boxes) > 0:
+                    for box in result.boxes:
+                        cls_id = int(box.cls[0])
+                        cls_name = model.names.get(cls_id, f"class_{cls_id}")
+                        confidence = float(box.conf[0])
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        track_id = int(box.id[0]) if box.id is not None else None
 
-                        if result.boxes is not None and len(result.boxes) > 0:
-                            for box in result.boxes:
-                                cls_id = int(box.cls[0])
-                                cls_name = model.names.get(cls_id, f"class_{cls_id}")
-                                confidence = float(box.conf[0])
-                                x1, y1, x2, y2 = box.xyxy[0].tolist()
-                                det = {"class_name": cls_name, "class_id": cls_id, "confidence": round(confidence, 4), "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)]}
-                                frame_detections.append(det)
-                                total_objects += 1
-                                class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
+                        det = {"class_name": cls_name, "class_id": cls_id, "confidence": round(confidence, 4), "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)], "track_id": track_id}
+                        frame_detections.append(det)
+                        total_objects += 1
+                        class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
 
-                        last_detections = frame_detections
-                        inference_time = float(result.speed.get("inference", 0))
-                        total_inference_time += inference_time
-                    else:
-                        inference_time = 0
+                        if track_id is not None and track_id not in seen_track_ids:
+                            seen_track_ids.add(track_id)
+                            unique_vehicle_count += 1
 
-                    # 绘制标注（复用 last_detections）
-                    annotated = frame.copy()
-                    for det in last_detections:
-                        x1, y1, x2, y2 = det["bbox"]
-                        cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-                        cv2.putText(annotated, f"{det['class_name']} {det['confidence']:.2f}", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                    video_writer.write(annotated)
+                        # ── 越线检测 ──
+                        if track_id is not None:
+                            cx = (x1 + x2) / 2
+                            cy = (y1 + y2) / 2
+                            if track_id in prev_centers:
+                                prev_cy = prev_centers[track_id][1]
+                                # 从上方越线到下方（或反过来）
+                                if (prev_cy < y_line and cy >= y_line) or (prev_cy > y_line and cy <= y_line):
+                                    crossing_count += 1
+                            prev_centers[track_id] = (cx, cy)
 
-                    # 保留少量关键帧缩略图
-                    annotated_base64 = None
-                    if len(key_frames) < 6:
-                        _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                        annotated_base64 = base64.b64encode(buf).decode("utf-8")
+                inference_time = float(result.speed.get("inference", 0))
+                total_inference_time += inference_time
+                last_detections = frame_detections
 
+                # 绘制标注框（每帧都绘制，标注框连续）
+                annotated = frame.copy()
+                for det in last_detections:
+                    x1, y1, x2, y2 = det["bbox"]
+                    cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                    label = f"#{det.get('track_id', '?')} {det['class_name']} {det['confidence']:.2f}"
+                    cv2.putText(annotated, label, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+                # 画基准线（红色虚线）+ 越线计数
+                cv2.line(annotated, (0, y_line), (width, y_line), (0, 0, 255), 2)
+                cv2.putText(annotated, f"Line y={y_line} | Crossed: {crossing_count}", (10, y_line - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                video_writer.write(annotated)
+
+                # 保留少量关键帧缩略图（仅采样帧）
+                if is_sampled and len(key_frames) < 10:
+                    _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    annotated_base64 = base64.b64encode(buf).decode("utf-8")
                     key_frames.append({
                         "frame_index": frame_idx,
                         "timestamp": round(frame_idx / fps, 2),
@@ -577,24 +616,13 @@ class DetectionService:
                         "inference_time": round(inference_time, 2),
                     })
 
-                    if need_inference:
-                        for det in last_detections:
-                            db.add(DetectionResult(task_id=task_id, image_path=f"frame_{frame_idx}.jpg", class_name=det["class_name"], class_id=det["class_id"], confidence=det["confidence"], bbox=det["bbox"], inference_time=inference_time))
+                if is_sampled:
+                    for det in last_detections:
+                        db.add(DetectionResult(task_id=task_id, image_path=f"frame_{frame_idx}.jpg", class_name=det["class_name"], class_id=det["class_id"], confidence=det["confidence"], bbox=det["bbox"], inference_time=inference_time))
 
-                    if task:
-                        task.total_objects = total_objects
-                        db.commit()
-                else:
-                    # 非采样帧：用上一帧的检测结果绘制标注框，保持连续
-                    if last_detections:
-                        annotated = frame.copy()
-                        for det in last_detections:
-                            x1, y1, x2, y2 = det["bbox"]
-                            cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-                            cv2.putText(annotated, f"{det['class_name']} {det['confidence']:.2f}", (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                        video_writer.write(annotated)
-                    else:
-                        video_writer.write(frame)
+                if task and frame_idx % 50 == 0:
+                    task.total_objects = total_objects
+                    db.commit()
 
                 frame_idx += 1
 
@@ -645,6 +673,9 @@ class DetectionService:
                 "duration_seconds": round(duration_seconds, 2),
                 "video_resolution": {"width": width, "height": height},
                 "total_objects": total_objects,
+                "unique_vehicles": unique_vehicle_count,
+                "crossing_count": crossing_count,
+                "y_line": y_line,
                 "class_counts": class_counts,
                 "key_frames": key_frames,
                 "annotated_video_url": annotated_video_url,

@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:7b"
 
+    # Embedding 模型
+    EMBEDDING_MODEL: str = "text-embedding-v3"
+
     @property
     def cors_origins_list(self) -> list:
         """将 CORS 配置字符串转为列表"""

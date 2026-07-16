@@ -51,6 +51,14 @@ export function getDetectionStatus(taskId) {
 }
 
 /**
+ * 获取可用的检测模型列表
+ * @returns {Promise} - { models: [{id, version, model_name, map50, is_default}] }
+ */
+export function getModelList() {
+  return request.get('/detection/models')
+}
+
+/**
  * 视频检测
  * @param {FormData} formData - 包含 file 字段的 FormData（视频文件）
  * @returns {Promise} - { task_id, status, message }
