@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.agent.detection_agent import detection_agent
+from app.agent.graph import multi_agent
 from app.api.auth import get_current_user
 from app.core.logger import get_logger
 
@@ -73,7 +74,7 @@ async def chat_stream(
         set_current_user_id(current_user.id)
 
         try:
-            async for event in detection_agent.chat_stream(
+            async for event in multi_agent.run_stream(
                 message=message, image_path=image_path,
                 user_id=current_user.id, session_id=session_id or f"default_{current_user.id}",
             ):

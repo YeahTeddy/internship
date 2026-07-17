@@ -17,10 +17,11 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     DEFAULT_WINDOW = 60
 
     RATE_LIMITS = {
-        "/api/detection/single": {"limit": 30, "window": 60},
-        "/api/detection/batch": {"limit": 10, "window": 60},
-        "/api/detection/video": {"limit": 5, "window": 60},
-        "/api/detection/camera": {"limit": 10, "window": 60},
+        "/api/detection/single": {"limit": 100, "window": 60},
+        "/api/detection/batch": {"limit": 50, "window": 60},
+        "/api/detection/video": {"limit": 10, "window": 60},
+        "/api/detection/camera": {"limit": 50, "window": 60},
+        "/api/detection/models": {"limit": 200, "window": 60},
         "/api/training/status": {"limit": 200, "window": 60},
         "/api/training/metrics": {"limit": 200, "window": 60},
         "/api/training/tasks": {"limit": 200, "window": 60},

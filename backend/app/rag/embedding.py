@@ -18,14 +18,23 @@ class EmbeddingService:
     def _init_client(self):
         try:
             from openai import OpenAI
-            qwen_api_key = getattr(settings, "QWEN_API_KEY", "")
-            if qwen_api_key and qwen_api_key != "sk-your-qwen-api-key":
-                self._client = OpenAI(api_key=qwen_api_key, base_url=getattr(settings, "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
-                self._model = getattr(settings, "EMBEDDING_MODEL", "text-embedding-v3")
+
+            # 优先级：豆包 > 通义千问 > OpenAI
+            embedding_api_key = getattr(settings, "EMBEDDING_API_KEY", "")
+            if embedding_api_key:
+                # 豆包 Embedding
+                self._client = OpenAI(api_key=embedding_api_key, base_url=getattr(settings, "EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/coding/v3"))
+                self._model = getattr(settings, "EMBEDDING_MODEL", "doubao-embedding-vision")
             else:
-                self._client = OpenAI(api_key=getattr(settings, "OPENAI_API_KEY", ""), base_url=getattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1"))
-                self._model = getattr(settings, "EMBEDDING_MODEL", "text-embedding-3-small")
-            logger.info("Embedding 服务初始化完成: model=%s", self._model)
+                qwen_api_key = getattr(settings, "QWEN_API_KEY", "")
+                if qwen_api_key and qwen_api_key != "sk-your-qwen-api-key":
+                    self._client = OpenAI(api_key=qwen_api_key, base_url=getattr(settings, "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
+                    self._model = getattr(settings, "EMBEDDING_MODEL", "text-embedding-v3")
+                else:
+                    self._client = OpenAI(api_key=getattr(settings, "OPENAI_API_KEY", ""), base_url=getattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1"))
+                    self._model = getattr(settings, "EMBEDDING_MODEL", "text-embedding-3-small")
+
+            logger.info("Embedding 服务初始化完成: model=%s, base_url=%s", self._model, self._client.base_url)
         except Exception as e:
             logger.error("Embedding 服务初始化失败: %s", str(e))
             self._client = None
@@ -35,7 +44,7 @@ class EmbeddingService:
             return [[] for _ in texts]
         try:
             all_embeddings = []
-            batch_size = 20
+            batch_size = 8  # 豆包 Embedding API 限制每次最多 10 条
             for i in range(0, len(texts), batch_size):
                 batch = texts[i:i + batch_size]
                 response = self._client.embeddings.create(model=self._model, input=batch)

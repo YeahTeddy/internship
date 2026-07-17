@@ -59,4 +59,41 @@ def query_detection_history(page: int = 1, page_size: int = 10) -> str:
         return json.dumps({"error": f"历史查询失败: {str(e)}"}, ensure_ascii=False)
 
 
-ANALYSIS_TOOLS = [query_detection_stats, query_detection_history]
+@tool
+def get_detection_results(task_id: int) -> str:
+    """获取指定检测任务的详细结果（类别、置信度、边界框），用于分析。
+
+    Args:
+        task_id: 检测任务 ID
+
+    Returns:
+        JSON 字符串，包含每条检测结果的详细信息和类别统计
+    """
+    try:
+        from app.database.session import SessionLocal
+        from app.entity.db_models import DetectionResult, DetectionTask
+
+        db = SessionLocal()
+        try:
+            task = db.query(DetectionTask).filter(DetectionTask.id == task_id).first()
+            if not task:
+                return json.dumps({"error": "任务不存在"}, ensure_ascii=False)
+
+            results = db.query(DetectionResult).filter(DetectionResult.task_id == task_id).all()
+            class_counts = {}
+            for r in results:
+                class_counts[r.class_name] = class_counts.get(r.class_name, 0) + 1
+
+            return json.dumps({
+                "task_id": task_id,
+                "total_objects": task.total_objects or 0,
+                "class_counts": class_counts,
+                "result_count": len(results),
+            }, ensure_ascii=False)
+        finally:
+            db.close()
+    except Exception as e:
+        return json.dumps({"error": f"查询失败: {str(e)}"}, ensure_ascii=False)
+
+
+ANALYSIS_TOOLS = [query_detection_stats, query_detection_history, get_detection_results]

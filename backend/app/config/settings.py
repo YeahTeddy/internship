@@ -81,7 +81,9 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "qwen2.5:7b"
 
     # Embedding 模型
-    EMBEDDING_MODEL: str = "text-embedding-v3"
+    EMBEDDING_MODEL: str = "doubao-embedding-vision"
+    EMBEDDING_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/coding/v3"
+    EMBEDDING_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> list:

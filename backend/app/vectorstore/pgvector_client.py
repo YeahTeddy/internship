@@ -1,5 +1,6 @@
 """Pgvector 向量存储客户端"""
 
+import json
 from typing import Optional
 
 from sqlalchemy import text
@@ -9,7 +10,7 @@ from app.database.session import SessionLocal
 
 logger = get_logger(__name__)
 
-EMBEDDING_DIM = 1024
+EMBEDDING_DIM = 2048  # 豆包 doubao-embedding-vision 输出 2048 维
 
 CREATE_TABLE_SQL = f"""
 CREATE TABLE IF NOT EXISTS knowledge_embeddings (
@@ -50,9 +51,11 @@ class PgvectorClient:
         try:
             for i in range(len(contents)):
                 metadata = metadatas[i] if metadatas and i < len(metadatas) else {}
+                metadata_json = json.dumps(metadata, ensure_ascii=False)
                 embedding_str = "[" + ",".join(str(v) for v in embeddings[i]) + "]"
-                db.execute(text("INSERT INTO knowledge_embeddings (content, metadata, embedding) VALUES (:content, :metadata::jsonb, :embedding::vector)"),
-                    {"content": contents[i], "metadata": json.dumps(metadata, ensure_ascii=False), "embedding": embedding_str})
+                db.execute(
+                    text("INSERT INTO knowledge_embeddings (content, metadata, embedding) VALUES (:content, cast(:metadata as jsonb), cast(:embedding as vector))"),
+                    {"content": contents[i], "metadata": metadata_json, "embedding": embedding_str})
             db.commit()
             logger.info("插入 %d 条向量数据", len(contents))
         except Exception as e:
@@ -65,7 +68,7 @@ class PgvectorClient:
         db = SessionLocal()
         try:
             embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
-            sql = "SELECT content, metadata, 1 - (embedding <=> :query::vector) AS similarity FROM knowledge_embeddings ORDER BY embedding <=> :query::vector LIMIT :top_k"
+            sql = "SELECT content, metadata, 1 - (embedding <=> cast(:query as vector)) AS similarity FROM knowledge_embeddings ORDER BY embedding <=> cast(:query as vector) LIMIT :top_k"
             results = db.execute(text(sql), {"query": embedding_str, "top_k": top_k}).fetchall()
             return [{"content": row[0], "metadata": row[1] if isinstance(row[1], dict) else {}, "similarity": round(float(row[2]), 4)} for row in results]
         except Exception as e:

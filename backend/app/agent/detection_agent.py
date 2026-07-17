@@ -54,12 +54,16 @@ def create_llm():
         base_url = getattr(settings, "OPENAI_BASE_URL", "https://api.openai.com/v1")
         model_name = getattr(settings, "OPENAI_MODEL", "gpt-4o-mini")
 
+    import httpx
+    http_client = httpx.Client(verify=False, timeout=30)
+
     return ChatOpenAI(
         model=model_name,
         openai_api_key=api_key,
         openai_api_base=base_url,
         temperature=0.1,
         streaming=True,
+        http_client=http_client,
     )
 
 
