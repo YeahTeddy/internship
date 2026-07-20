@@ -95,6 +95,43 @@ class UserService:
             raise HTTPException(status_code=404, detail="用户不存在")
         return user
 
+    @staticmethod
+    def list_users(db: Session, page: int = 1, page_size: int = 20, keyword: str = None) -> dict:
+        """分页查询用户列表"""
+        from sqlalchemy import desc
+        from app.entity.db_models import Role, UserRole
+
+        query = db.query(User)
+        if keyword:
+            query = query.filter(
+                User.username.contains(keyword) | User.email.contains(keyword)
+            )
+
+        total = query.count()
+        users = query.order_by(desc(User.id)).offset((page - 1) * page_size).limit(page_size).all()
+
+        items = []
+        for u in users:
+            roles = db.query(Role).join(UserRole, UserRole.role_id == Role.id).filter(UserRole.user_id == u.id).all()
+            items.append({
+                "id": u.id,
+                "username": u.username,
+                "email": u.email,
+                "phone": u.phone,
+                "is_active": u.is_active,
+                "is_superuser": u.is_superuser,
+                "roles": [{"id": r.id, "name": r.name, "display_name": r.display_name} for r in roles],
+            })
+
+        return {"items": items, "total": total}
+
+    @staticmethod
+    def list_roles(db: Session) -> list[dict]:
+        """获取所有角色"""
+        from app.entity.db_models import Role
+        roles = db.query(Role).all()
+        return [{"id": r.id, "name": r.name, "display_name": r.display_name} for r in roles]
+
 
 # 全局单例
 user_service = UserService()

@@ -15,16 +15,18 @@ from langchain_openai import ChatOpenAI
 
 from app.agent.memory import conversation_memory
 from app.agent.prompts import DETECTION_AGENT_SYSTEM_PROMPT
+from app.agent.tools.alert_tool import ALERT_TOOLS
 from app.agent.tools.analysis_tool import ANALYSIS_TOOLS
 from app.agent.tools.detection_tool import DETECTION_TOOLS
 from app.agent.tools.knowledge_tool import KNOWLEDGE_TOOLS
+from app.agent.tools.traffic_tool import TRAFFIC_TOOLS
 from app.config.settings import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-# 全部工具列表（检测 4 + 统计 2 + 知识 1）
-ALL_TOOLS = DETECTION_TOOLS + ANALYSIS_TOOLS + KNOWLEDGE_TOOLS
+# 全部工具列表（检测 4 + 统计 2 + 知识 1 + 交通 1 + 告警 1）
+ALL_TOOLS = DETECTION_TOOLS + ANALYSIS_TOOLS + KNOWLEDGE_TOOLS + TRAFFIC_TOOLS + ALERT_TOOLS
 
 
 

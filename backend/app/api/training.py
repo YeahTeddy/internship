@@ -24,6 +24,7 @@ from app.config.settings import settings
 from app.core.logger import get_logger
 from app.database.session import get_db
 from app.entity.db_models import TrainingTask
+from app.middleware.permission_checker import require_permission
 from app.entity.schemas import ModelExportRequest, ModelValidateRequest, TrainingTaskCreate
 from app.training.training_service import training_service
 
@@ -36,7 +37,7 @@ router = APIRouter(prefix="/api/training", tags=["模型训练"])
 async def start_training(
     request: TrainingTaskCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("training:start")),
 ):
     """
     启动模型训练任务
@@ -155,7 +156,7 @@ async def get_training_metrics(
 async def stop_training(
     task_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("training:stop")),
 ):
     """停止正在运行的训练任务"""
     result = training_service.stop_training(db, task_id)
@@ -190,7 +191,7 @@ async def validate_model(
     task_id: int,
     request: ModelValidateRequest = None,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("training:evaluate")),
 ):
     """
     对已完成训练的模型执行评估
@@ -228,7 +229,7 @@ async def export_model(
     task_id: int,
     request: ModelExportRequest = None,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("training:export")),
 ):
     """
     导出训练好的模型为正式版本

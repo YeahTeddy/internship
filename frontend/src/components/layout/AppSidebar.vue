@@ -8,7 +8,7 @@
       active-text-color="#409eff"
     >
       <el-menu-item
-        v-for="item in menuItems"
+        v-for="item in visibleMenuItems"
         :key="item.path"
         :index="item.path"
       >
@@ -22,7 +22,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   ChatDotRound,
@@ -31,24 +31,50 @@ import {
   Clock,
   DataAnalysis,
   Setting,
+  User,
+  Lock,
 } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
+import request from '@/utils/request'
 
 const route = useRoute()
+const userStore = useUserStore()
+const userRoles = ref([])
 
 /** 当前激活的菜单项 */
 const activeMenu = computed(() => {
   return '/' + route.path.split('/')[1]
 })
 
-/** 侧边栏菜单配置 */
+/** 侧边栏菜单配置（含权限标识） */
 const menuItems = [
-  { path: '/chat', title: '智能对话', icon: ChatDotRound },
-  { path: '/detection', title: '检测工作台', icon: Camera },
-  { path: '/training', title: '模型训练', icon: Cpu },
-  { path: '/history', title: '历史记录', icon: Clock },
-  { path: '/dashboard', title: '数据看板', icon: DataAnalysis },
-  { path: '/settings', title: '系统设置', icon: Setting },
+  { path: '/chat', title: '智能对话', icon: ChatDotRound, roles: null },
+  { path: '/detection', title: '检测工作台', icon: Camera, roles: null },
+  { path: '/training', title: '模型训练', icon: Cpu, roles: null },
+  { path: '/history', title: '历史记录', icon: Clock, roles: null },
+  { path: '/dashboard', title: '数据看板', icon: DataAnalysis, roles: null },
+  { path: '/users', title: '用户管理', icon: User, roles: ['admin'] },
+  { path: '/roles', title: '角色管理', icon: Lock, roles: ['admin'] },
+  { path: '/settings', title: '系统设置', icon: Setting, roles: null },
 ]
+
+/** 根据角色过滤可见菜单 */
+const visibleMenuItems = computed(() => {
+  return menuItems.filter(item => {
+    if (!item.roles) return true // 无权限限制
+    return item.roles.some(r => userRoles.value.includes(r))
+  })
+})
+
+/** 获取当前用户角色 */
+onMounted(async () => {
+  try {
+    const res = await request.get('/auth/me')
+    userRoles.value = (res.roles || []).map(r => r.name || r)
+  } catch (e) {
+    console.error('获取用户角色失败', e)
+  }
+})
 </script>
 
 <style lang="scss" scoped>

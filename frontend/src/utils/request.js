@@ -53,7 +53,7 @@ request.interceptors.response.use(
           break
 
         case 403:
-          ElMessage.error('没有权限执行此操作')
+          ElMessage.error(response.data?.detail || '没有权限执行此操作')
           break
 
         case 404:

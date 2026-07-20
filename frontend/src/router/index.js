@@ -64,6 +64,18 @@ const routes = [
         component: () => import('@/views/SettingsPage.vue'),
         meta: { title: '系统设置', icon: 'Setting' },
       },
+      {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/views/UserPage.vue'),
+        meta: { title: '用户管理', icon: 'User' },
+      },
+      {
+        path: 'roles',
+        name: 'Roles',
+        component: () => import('@/views/RolePage.vue'),
+        meta: { title: '角色管理', icon: 'Lock' },
+      },
     ],
   },
 

@@ -26,6 +26,7 @@ from app.database.session import SessionLocal
 from app.entity.db_models import DetectionTask
 from app.services.detection_service import detection_service, get_model
 from app.storage.redis_client import redis_client
+from app.middleware.permission_checker import require_permission
 
 logger = get_logger(__name__)
 
@@ -56,7 +57,7 @@ async def detect_single_api(
     conf: float = Form(0.25, description="置信度阈值"),
     scene_id: int = Form(None, description="场景 ID"),
     model_version_id: int = Form(None, description="模型版本 ID"),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("detection:scan")),
 ):
     """快捷单图检测（跳过 LLM，直接调用 YOLO）"""
     if not scene_id:
@@ -85,7 +86,7 @@ async def detect_batch_api(
     conf: float = Form(0.25),
     scene_id: int = Form(None),
     model_version_id: int = Form(None),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("detection:batch")),
 ):
     """快捷批量检测"""
     if not scene_id:
@@ -118,7 +119,7 @@ async def detect_zip_api(
     file: UploadFile = File(..., description="ZIP 压缩包"),
     conf: float = Form(0.25),
     scene_id: int = Form(None),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("detection:zip")),
 ):
     """快捷 ZIP 检测：解压 ZIP 并批量检测其中所有图片"""
     if not scene_id:
@@ -179,7 +180,7 @@ async def detect_video_api(
     max_frames: int = Form(50, description="最多处理关键帧数"),
     scene_id: int = Form(None, description="场景 ID"),
     model_version_id: int = Form(None, description="模型版本 ID"),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_permission("detection:video")),
 ):
     """视频检测：上传视频，后台异步处理，通过 status 接口轮询进度"""
     if not scene_id:

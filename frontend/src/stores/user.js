@@ -4,6 +4,7 @@
  */
 import { defineStore } from 'pinia'
 import { loginApi, getUserInfoApi } from '@/api/auth'
+import { useAgentStore } from './agent'
 
 const TOKEN_KEY = 'rsod_token'
 const USER_KEY = 'rsod_user'
@@ -39,6 +40,9 @@ export const useUserStore = defineStore('user', {
      * @param {Object} credentials - { username, password }
      */
     async login(credentials) {
+      // 清空上一个用户的对话记录
+      useAgentStore().clear()
+
       const res = await loginApi(credentials)
 
       // 保存 Token
@@ -73,6 +77,8 @@ export const useUserStore = defineStore('user', {
       this.user = null
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(USER_KEY)
+      // 清空对话记录，防止不同用户共享
+      useAgentStore().clear()
     },
   },
 })

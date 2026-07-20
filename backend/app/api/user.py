@@ -5,9 +5,11 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.core.logger import get_logger
+from app.database.session import SessionLocal, get_db
 from app.services.user_service import user_service
 
 logger = get_logger(__name__)
@@ -19,14 +21,15 @@ async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     keyword: Optional[str] = Query(None, description="用户名/邮箱关键词"),
+    db: Session = Depends(get_db),
     _current_user=Depends(get_current_user),
 ):
-    return user_service.list_users(page=page, page_size=page_size, keyword=keyword)
+    return user_service.list_users(db=db, page=page, page_size=page_size, keyword=keyword)
 
 
 @router.get("/roles", summary="获取所有角色")
-async def list_roles(_current_user=Depends(get_current_user)):
-    roles = user_service.list_roles()
+async def list_roles(db: Session = Depends(get_db), _current_user=Depends(get_current_user)):
+    roles = user_service.list_roles(db)
     return {"roles": roles}
 
 
@@ -46,6 +49,48 @@ async def update_profile(
         if email is not None: user.email = email
         db.commit()
         return {"message": "个人信息已更新", "user": {"id": user.id, "username": user.username, "email": user.email, "phone": user.phone}}
+    finally:
+        db.close()
+
+
+@router.get("/{user_id}/roles", summary="用户角色列表")
+async def get_user_roles(user_id: int, _current_user=Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        from app.entity.db_models import Role, UserRole
+        roles = db.query(Role).join(UserRole, UserRole.role_id == Role.id).filter(UserRole.user_id == user_id).all()
+        return {"user_id": user_id, "roles": [{"id": r.id, "name": r.name, "display_name": r.display_name} for r in roles]}
+    finally:
+        db.close()
+
+
+from pydantic import BaseModel
+
+class RoleIdsRequest(BaseModel):
+    role_ids: list[int] = []
+
+@router.post("/{user_id}/roles", summary="分配角色")
+async def assign_role(user_id: int, body: RoleIdsRequest, _current_user=Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        from app.entity.db_models import UserRole
+        db.query(UserRole).filter(UserRole.user_id == user_id).delete()
+        for rid in body.role_ids:
+            db.add(UserRole(user_id=user_id, role_id=rid))
+        db.commit()
+        return {"message": f"已为用户分配 {len(body.role_ids)} 个角色"}
+    finally:
+        db.close()
+
+
+@router.delete("/{user_id}/roles", summary="移除用户角色")
+async def remove_user_role(user_id: int, role_id: int, _current_user=Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        from app.entity.db_models import UserRole
+        db.query(UserRole).filter(UserRole.user_id == user_id, UserRole.role_id == role_id).delete()
+        db.commit()
+        return {"message": "角色已移除"}
     finally:
         db.close()
 

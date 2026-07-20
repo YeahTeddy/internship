@@ -12,6 +12,8 @@ from app.api.history import router as history_router
 from app.api.training import router as training_router
 from app.api.user import router as user_router
 from app.api.knowledge import router as knowledge_router
+from app.api.role import router as role_router
+from app.api.permission import router as permission_router
 from app.core.exceptions import register_exception_handlers
 from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.middleware.request_logger import RequestLogMiddleware
@@ -78,6 +80,8 @@ app.include_router(dashboard_router)  # Day 10: 数据看板
 app.include_router(history_router)    # Day 10: 检测历史
 app.include_router(user_router)       # Day 10: 用户管理
 app.include_router(knowledge_router)  # Day 11: 知识库管理
+app.include_router(role_router)       # 权限管理：角色 CRUD
+app.include_router(permission_router)  # 权限管理：权限列表
 
 
 @app.get("/")

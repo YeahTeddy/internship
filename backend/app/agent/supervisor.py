@@ -13,10 +13,12 @@ SUPERVISOR_PROMPT = """你是任务调度器。根据用户输入，选择最合
 可选助手：
 - detection: 用户需要检测图片/视频中的目标，或询问检测结果
 - analysis:  用户需要查询检测历史、统计分析数据
+- traffic:   用户需要交通统计（车流量、车型分析、密度计算）
+- alert:     用户需要天气风险评估、告警判断
 - qa:        用户提出目标检测领域知识问题
 
 规则：
-- 只回复一个助手名称（detection / analysis / qa）
+- 只回复一个助手名称（detection / analysis / traffic / alert / qa）
 - 如果无法判断，默认回复 qa
 - 只回复助手名称，不要回复其他内容"""
 
